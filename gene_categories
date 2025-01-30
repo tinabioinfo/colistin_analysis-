@@ -1,0 +1,76 @@
+#gene categories list
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Define your file paths
+data_path = '/home/tinas/new_colistin_analysis/output_roary_430/binary_matrix.csv'
+heatmap_path = '/home/tinas/new_colistin_analysis/output_roary_430/gene_categories_heatmap_labeled.png'
+gene_list_path = '/home/tinas/new_colistin_analysis/output_roary_430/gene_categories_list.csv'
+
+# Load the data
+data = pd.read_csv(data_path)
+
+# Define gene_data_df as the subset of data without the phenotype row
+gene_data_df = data.loc[data['Gene'] != "Phenotype"]
+
+# Separate the phenotype data
+phenotype_data = data.loc[data['Gene'] == "Phenotype"].iloc[0, 1:]
+
+# Get the list of resistant and susceptible isolates
+resistant_isolates = phenotype_data.index[phenotype_data == 1].tolist()
+susceptible_isolates = phenotype_data.index[phenotype_data == 0].tolist()
+
+# Separate the gene data for resistant and susceptible isolates
+resistant_gene_data = gene_data_df[['Gene'] + resistant_isolates]
+susceptible_gene_data = gene_data_df[['Gene'] + susceptible_isolates]
+
+# Core, unique, and accessory genes analysis
+core_resistant_genes = resistant_gene_data.loc[resistant_gene_data.iloc[:, 1:].all(axis=1), 'Gene']
+unique_resistant_genes = resistant_gene_data.loc[resistant_gene_data.iloc[:, 1:].all(axis=1) &
+                                                 ~susceptible_gene_data.iloc[:, 1:].any(axis=1), 'Gene']
+core_susceptible_genes = susceptible_gene_data.loc[susceptible_gene_data.iloc[:, 1:].all(axis=1), 'Gene']
+unique_susceptible_genes = susceptible_gene_data.loc[susceptible_gene_data.iloc[:, 1:].all(axis=1) &
+                                                     ~resistant_gene_data.iloc[:, 1:].any(axis=1), 'Gene']
+accessory_genes = gene_data_df.loc[(gene_data_df.iloc[:, 1:].sum(axis=1) < len(resistant_isolates) + len(susceptible_isolates)) &
+                                   (gene_data_df.iloc[:, 1:].sum(axis=1) > 0), 'Gene']
+accessory_genes = accessory_genes.loc[~accessory_genes.isin(core_resistant_genes) &
+                                      ~accessory_genes.isin(core_susceptible_genes)]
+
+# Define gene_sets_corrected with the previously calculated gene lists
+gene_sets_corrected = {
+    "Core Resistant Genes": core_resistant_genes.tolist(),
+    "Unique Resistant Genes": unique_resistant_genes.tolist(),
+    "Core Susceptible Genes": core_susceptible_genes.tolist(),
+    "Unique Susceptible Genes": unique_susceptible_genes.tolist(),
+    "Accessory Genes": accessory_genes.tolist()
+}
+
+# Create a boolean DataFrame for gene categories
+gene_categories_df = pd.DataFrame(index=gene_data_df['Gene'])
+gene_categories_df['Core Resistant'] = gene_data_df['Gene'].isin(core_resistant_genes).values
+gene_categories_df['Unique Resistant'] = gene_data_df['Gene'].isin(unique_resistant_genes).values
+gene_categories_df['Core Susceptible'] = gene_data_df['Gene'].isin(core_susceptible_genes).values
+gene_categories_df['Unique Susceptible'] = gene_data_df['Gene'].isin(unique_susceptible_genes).values
+gene_categories_df['Accessory'] = gene_data_df['Gene'].isin(accessory_genes).values
+
+# Visualization with labeled heatmap
+plt.figure(figsize=(20, 20))
+sns.heatmap(gene_categories_df.T, cmap="YlGnBu", cbar=True, yticklabels=True, xticklabels=gene_categories_df.index)
+plt.title('Gene Presence in Resistant and Susceptible Isolates')
+plt.xlabel('Genes')
+plt.ylabel('Categories')
+plt.xticks(rotation=90)
+plt.yticks(rotation=0)
+plt.yticks(fontsize=90)
+plt.xticks(fontsize=90)
+plt.tight_layout()
+plt.savefig(heatmap_path)
+
+# Save the gene lists to a CSV file
+gene_sets_df = pd.DataFrame.from_dict(gene_sets_corrected, orient='index').transpose()
+gene_sets_df.to_csv(gene_list_path, index=False)
+
+print(f"Heatmap saved to: {heatmap_path}")
+print(f"Gene lists saved to: {gene_list_path}")
+plt.show()
