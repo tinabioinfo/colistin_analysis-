@@ -1,0 +1,32 @@
+#save phenotype data
+#save labels data in a seperate file
+import pandas as pd
+import numpy as np
+from scipy.stats import fisher_exact, chi2_contingency, pearsonr
+from statsmodels.stats.multitest import multipletests
+import statsmodels.api as sm
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
+from multiprocessing import Pool, cpu_count
+
+# Load the data from the uploaded file
+file_path = '/home/tinas/new_colistin_analysis/output_roary_430/final_binary_matrix.csv'
+data = pd.read_csv(file_path, index_col=0)
+
+# Extract phenotype information and remove the phenotype row for gene analysis
+phenotype_data = data.iloc[-1]
+data = data.iloc[:-1]
+
+# Save phenotype data for verification
+phenotype_data.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/phenotype_data.csv')
+print("Phenotype data extracted and saved.")
+
+# Identify resistant and susceptible samples
+resistant_labels = phenotype_data[phenotype_data == 1].index
+susceptible_labels = phenotype_data[phenotype_data == 0].index
+
+# Save resistant and susceptible labels for verification
+pd.Series(resistant_labels).to_csv('/home/tinas/new_colistin_analysis/output_roary_430/resistant_labels.csv', index=False)
+pd.Series(susceptible_labels).to_csv('/home/tinas/new_colistin_analysis/output_roary_430/susceptible_labels.csv', index=False)
+print("Resistant and susceptible labels saved.")
