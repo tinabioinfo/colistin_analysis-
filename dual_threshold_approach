@@ -1,0 +1,142 @@
+Code_1
+#identification of distinctive accessory genes
+# new_Adjusted thresholds (we applied this threshold)
+threshold_resistant = 0.60 # Maintained for resistant isolates (22 total)
+threshold_susceptible = 0.60 # Increased for susceptible isolates (408 total) to reduce false positives (~244 genomes but absent in ~8 resistant genes)
+
+# Calculate counts
+count_resistant = data[resistant_labels].sum(axis=1)
+count_susceptible = data[susceptible_labels].sum(axis=1)
+total_resistant = len(resistant_labels)
+total_susceptible = len(susceptible_labels)
+
+# Apply thresholds for characteristic resistant genes
+char_genes_resistant = data.index[(count_resistant / total_resistant >= threshold_resistant) & 
+                                  (count_susceptible / total_susceptible <= (1 - threshold_resistant))].tolist()
+
+# Apply new thresholds for characteristic susceptible genes with adjusted threshold
+char_genes_susceptible = data.index[(count_susceptible / total_susceptible >= threshold_susceptible) & 
+                                    (count_resistant / total_resistant <= (1 - threshold_resistant))].tolist()
+
+# Save threshold results for verification
+pd.DataFrame({
+    'Gene': char_genes_resistant
+}).to_csv('/home/tinas/new_colistin_analysis/output_roary_430/char_genes_resistant.csv', index=False)
+pd.DataFrame({
+    'Gene': char_genes_susceptible
+}).to_csv('/home/tinas/new_colistin_analysis/output_roary_430/char_genes_susceptible.csv', index=False)
+print("Characteristic genes for resistance and susceptibility saved.")
+
+# Prepare data for parallel processing
+#data_tuples = list(zip(data.index, count_resistant, count_susceptible))
+
+# Perform Fisher's Exact Test using parallel processing
+#from multiprocessing import Pool, cpu_count
+#from scipy.stats import fisher_exact
+
+#def perform_fisher_test(data_tuple):
+    #gene, count_resistant, count_susceptible = data_tuple
+    #table = [
+        #[count_resistant, total_resistant - count_resistant],
+       # [count_susceptible, total_susceptible - count_susceptible]
+    #]
+    #odds_ratio, p_value = fisher_exact(table)
+    #return (gene, odds_ratio, p_value)
+
+#with Pool(processes=cpu_count()) as pool:
+    #fisher_results = pool.map(perform_fisher_test, data_tuples)
+
+# Save Fisher's exact test results
+#df_fisher_results = pd.DataFrame(fisher_results, columns=['Gene', 'Odds Ratio', 'P-Value'])
+#df_fisher_results.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/combined_fisher_results.csv', index=False)
+#print("Fisher's exact test results saved.")
+print(char_genes_resistant)
+print(char_genes_susceptible)
+
+code_2
+#fisher's test for characteristic genes after applying threshold. (this code is accurate) in this code we are seperating resistant and susceptible gene list with fisher's test
+import pandas as pd
+from scipy.stats import fisher_exact
+from multiprocessing import Pool, cpu_count
+
+def perform_fisher_test(data_tuple):
+    gene, count_resistant, count_susceptible, total_resistant, total_susceptible = data_tuple
+    table = [
+        [count_resistant, total_resistant - count_resistant],
+        [count_susceptible, total_susceptible - count_susceptible]
+    ]
+    odds_ratio, p_value = fisher_exact(table)
+    return (gene, odds_ratio, p_value)
+
+def get_data_tuples(gene_list, data, total_resistant, total_susceptible):
+    return [(gene, data.loc[gene, 'count_resistant'], data.loc[gene, 'count_susceptible'], 
+             total_resistant, total_susceptible) for gene in gene_list if gene in data.index]
+
+# Load the main dataset
+data = pd.read_csv('/home/tinas/new_colistin_analysis/output_roary_430/final_binary_matrix.csv', index_col='Gene')
+data['count_resistant'] = data[resistant_labels].sum(axis=1)
+data['count_susceptible'] = data[susceptible_labels].sum(axis=1)
+total_resistant = len(resistant_labels)
+total_susceptible = len(susceptible_labels)
+
+# Load the characteristic gene lists
+char_genes_resistant = pd.read_csv('/home/tinas/new_colistin_analysis/output_roary_430/char_genes_resistant.csv')['Gene'].tolist()
+char_genes_susceptible = pd.read_csv('/home/tinas/new_colistin_analysis/output_roary_430/char_genes_susceptible.csv')['Gene'].tolist()
+
+# Prepare data tuples for Fisher's Exact Test
+data_tuples_resistant = get_data_tuples(char_genes_resistant, data, total_resistant, total_susceptible)
+data_tuples_susceptible = get_data_tuples(char_genes_susceptible, data, total_resistant, total_susceptible)
+
+# Perform Fisher's Exact Test using parallel processing
+with Pool(processes=cpu_count()) as pool:
+    fisher_results_resistant = pool.map(perform_fisher_test, data_tuples_resistant)
+    fisher_results_susceptible = pool.map(perform_fisher_test, data_tuples_susceptible)
+
+# Save Fisher's exact test results
+df_fisher_results_resistant = pd.DataFrame(fisher_results_resistant, columns=['Gene', 'Odds Ratio', 'P-Value'])
+df_fisher_results_susceptible = pd.DataFrame(fisher_results_susceptible, columns=['Gene', 'Odds Ratio', 'P-Value'])
+df_fisher_results_resistant.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/fisher_resistant_results.csv', index=False)
+df_fisher_results_susceptible.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/fisher_susceptible_results.csv', index=False)
+
+print("Fisher's exact test results for resistant and susceptible genes saved.")
+print(df_fisher_results_resistant)
+print(df_fisher_results_susceptible)
+
+code_3
+#applying multuple test for bonferroni and fdr test
+import pandas as pd
+from statsmodels.stats.multitest import multipletests
+
+def apply_corrections(file_path, alpha=0.05):
+    # Load data from CSV
+    data = pd.read_csv(file_path)
+    
+    # Apply Bonferroni Correction
+    bonferroni_corrected = multipletests(data['P-Value'], alpha=alpha, method='bonferroni')
+    
+    # Apply FDR Correction (Benjamini-Hochberg)
+    fdr_corrected = multipletests(data['P-Value'], alpha=alpha, method='fdr_bh')
+    
+    # Add corrected p-values and rejection decisions to DataFrame
+    data['P-Value_Bonferroni'] = bonferroni_corrected[1]
+    data['Bonferroni_Reject'] = bonferroni_corrected[0]
+    data['P-Value_FDR'] = fdr_corrected[1]
+    data['FDR_Reject'] = fdr_corrected[0]
+    
+    return data
+
+# File paths
+path_resistant = '/home/tinas/new_colistin_analysis/output_roary_430/fisher_resistant_results.csv'
+path_susceptible = '/home/tinas/new_colistin_analysis/output_roary_430/fisher_susceptible_results.csv'
+
+# Apply corrections
+corrected_resistant = apply_corrections(path_resistant)
+corrected_susceptible = apply_corrections(path_susceptible)
+
+# Save the corrected results
+corrected_resistant.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/fisher_resistant_results_corrected.csv', index=False)
+corrected_susceptible.to_csv('/home/tinas/new_colistin_analysis/output_roary_430/fisher_susceptible_results_corrected.csv', index=False)
+
+print("Bonferroni and FDR corrections have been applied and results saved.")
+print(corrected_resistant)
+print(corrected_susceptible)
