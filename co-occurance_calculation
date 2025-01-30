@@ -1,0 +1,79 @@
+#calculate the co-occurance matrix
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the data
+#file_path = "/home/tinas/new_colistin_analysis/output_roary_430/233_merged/233_new_merged_binary_matrix_original.csv"
+file_path ="/home/tinas/new_colistin_analysis/transcriptome_anlaysis/all_sequence/all_out_blast/parse_output/headers_output/all_matrix/all_matrix_csv/1803_matrix_analaysis/1803_all_matrix.csv"
+binary_matrix_df = pd.read_csv(file_path, index_col=0)
+
+# Separate out the phenotype data (last row) and gene data
+phenotype_data = binary_matrix_df.loc["Phenotype", :]
+gene_data_df = binary_matrix_df.drop("Phenotype")
+
+# Identify the resistant (phenotype = 1) and susceptible (phenotype = 0) isolates
+resistant_isolates = phenotype_data[phenotype_data == 1].index
+susceptible_isolates = phenotype_data[phenotype_data == 0].index
+
+# Function to calculate co-occurrence for resistant and susceptible isolates using matrix multiplication
+def calculate_co_occurrence_matrix(isolate_matrix):
+    return isolate_matrix.dot(isolate_matrix.T)
+
+# Create co-occurrence matrices for resistant and susceptible isolates
+resistant_matrix = gene_data_df[resistant_isolates]
+susceptible_matrix = gene_data_df[susceptible_isolates]
+
+resistant_co_occurrence_matrix = calculate_co_occurrence_matrix(resistant_matrix)
+susceptible_co_occurrence_matrix = calculate_co_occurrence_matrix(susceptible_matrix)
+
+# Visualization setup
+plt.figure(figsize=(20, 10))
+
+# Plotting the heatmap for resistant isolates
+plt.subplot(1, 2, 1)
+sns.heatmap(resistant_co_occurrence_matrix, cmap="YlGnBu", cbar=True, annot=False, fmt="d")
+plt.title("Gene Co-occurrence in Resistant Isolates")
+
+# Plotting the heatmap for susceptible isolates
+plt.subplot(1, 2, 2)
+sns.heatmap(susceptible_co_occurrence_matrix, cmap="YlGnBu", cbar=True, annot=False, fmt="d")
+plt.title("Gene Co-occurrence in Susceptible Isolates")
+
+plt.tight_layout()
+
+# Save the heatmap visualization to a file
+image_save_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/all_sequence/all_out_blast/parse_output/headers_output/all_matrix/all_matrix_csv/1803_matrix_analaysis/cooccurrence_comparison.png'
+plt.savefig(image_save_path, dpi=300, bbox_inches="tight")
+
+plt.show()
+
+# Function to save the top co-occurring genes to CSV
+def save_top_co_occurring_genes_to_csv(co_occurrence_matrix, num_pairs, file_name):
+    sorted_pairs = (co_occurrence_matrix.where(np.triu(np.ones(co_occurrence_matrix.shape), k=1).astype(bool))
+                    .stack()
+                    .sort_values(ascending=False))
+    top_pairs = sorted_pairs.head(num_pairs)
+    
+    # Create a DataFrame from the sorted pairs
+    top_pairs_df = pd.DataFrame(list(top_pairs.index), columns=['Gene1', 'Gene2'])
+    top_pairs_df['Co-occurrence Count'] = top_pairs.values
+
+    # Save to CSV
+    top_pairs_df.to_csv(file_name, index=False)
+    return top_pairs_df
+
+# Saving the top co-occurring genes for resistant and susceptible isolates to CSV
+resistant_csv_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/all_sequence/all_out_blast/parse_output/headers_output/all_matrix/all_matrix_csv/1803_matrix_analaysis/resistant_co_occurrence_top_genes.csv'
+susceptible_csv_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/all_sequence/all_out_blast/parse_output/headers_output/all_matrix/all_matrix_csv/1803_matrix_analaysis/susceptible_co_occurrence_top_genes.csv'
+
+resistant_top_genes_df = save_top_co_occurring_genes_to_csv(resistant_co_occurrence_matrix, 100, resistant_csv_path)
+susceptible_top_genes_df = save_top_co_occurring_genes_to_csv(susceptible_co_occurrence_matrix, 100, susceptible_csv_path)
+
+# Display the top co-occurring gene pairs
+print("Top Co-occurring Genes in Resistant Isolates:")
+print(resistant_top_genes_df.head())
+
+print("\nTop Co-occurring Genes in Susceptible Isolates:")
+print(susceptible_top_genes_df.head())
