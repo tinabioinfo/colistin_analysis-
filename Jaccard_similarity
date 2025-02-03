@@ -1,0 +1,58 @@
+#/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/2075_comprehensive_resistant_co_occurrence_matrix.csv
+#add gene in the first cell of the matrix for the gene name
+#start jaccard corelation coefficient
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the dataset
+file_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/2075_comprehensive_resistant_co_occurrence_matrix.csv'
+df = pd.read_csv(file_path)
+
+# Extract the co-occurrence matrix from the dataset (numerical values only)
+co_occurrence_matrix = df.iloc[:, 1:].values
+
+# Create an empty DataFrame to store the Jaccard similarity values for each pair of genes
+jaccard_similarity_df = pd.DataFrame(index=df['Gene'], columns=df['Gene'])
+
+# Loop over all pairs of genes to calculate Jaccard similarity
+for i in range(len(df)):
+    for j in range(len(df)):
+        occurrences_i = co_occurrence_matrix[i, i]
+        occurrences_j = co_occurrence_matrix[j, j]
+        co_occurrence_ij = co_occurrence_matrix[i, j]
+        
+        # Calculate union (occurrences of A + occurrences of B - co-occurrences of A and B)
+        union = occurrences_i + occurrences_j - co_occurrence_ij
+        
+        # Calculate Jaccard similarity, handling division by zero
+        jaccard_similarity = co_occurrence_ij / union if union != 0 else 0
+        
+        # Store the result in the DataFrame
+        jaccard_similarity_df.iloc[i, j] = jaccard_similarity
+
+# Save the Jaccard similarity matrix to a CSV file
+output_csv_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/jaccard_similarity_matrix_Resistant.csv'
+jaccard_similarity_df.to_csv(output_csv_path)
+
+# Visualize the Jaccard similarity matrix using a heatmap
+plt.figure(figsize=(10, 8))
+
+# Create a heatmap for Jaccard similarity matrix
+sns.heatmap(jaccard_similarity_df.astype(float), annot=False, cmap='Blues', fmt='.2f')
+
+# Set plot labels and title
+plt.title('Jaccard Similarity Heatmap of Gene Co-occurrence (Resistant isolates)', fontsize=16)
+plt.xlabel('Gene')
+plt.ylabel('Gene')
+
+# Save the plot as an image file
+output_plot_path = '/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/jaccard_similarity_heatmap_Resistant.png'
+plt.savefig(output_plot_path)
+
+# Show the plot
+plt.show()
+
+# Print the paths where the files are saved
+print(f"Jaccard Similarity Matrix saved to: {output_csv_path}")
+print(f"Heatmap saved to: {output_plot_path}")
