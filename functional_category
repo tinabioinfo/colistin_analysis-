@@ -1,0 +1,98 @@
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+
+# Load the Jaccard matrices and gene functions
+resistant_file = "/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/jaccard_similarity_matrix_Resistant.csv"
+susceptible_file = "/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/jaccard_similarity_matrix_susceptible.csv"
+gene_function_file = "/home/tinas/new_colistin_analysis/transcriptome_anlaysis/all_sequence/all_out_blast/parse_output/headers_output/all_matrix/all_matrix_csv/1803_matrix_analaysis/gene_function_table.csv"
+
+resistant_matrix = pd.read_csv(resistant_file, index_col=0)
+susceptible_matrix = pd.read_csv(susceptible_file, index_col=0)
+gene_function = pd.read_csv(gene_function_file)
+
+# Define genes of interest and thresholds
+genes_of_interest = ["LpxA", "lpxC", "group_9987", "lpxD"]
+threshold_resistant = 0.6
+threshold_susceptible = 0.5
+max_susceptible_isolates = 150
+
+# Map genes to functions
+gene_to_functions = {
+    row["Gene"]: row["Function"].split(";") for _, row in gene_function.iterrows()
+}
+
+# Initialize list to collect data for CSV
+csv_data = []
+
+# Function to get color based on gene function
+def get_function_color(functions, gene):
+    if gene in genes_of_interest:
+        return "red"
+    function_colors = {
+    "cytoplasmic": "#ff9999",
+    "cell communication": "#66b3ff",
+    "cationic": "#99ff99",
+    "down-regulated": "#ffcc99",
+    "Signal transduction": "#c2c2f0",
+    "polysaccharide": "#ffb3e6",
+    "TCS": "#c2f0c2", 
+    "Biofilm": "#f0e68c",
+    "up-regulated": "#ff6666",
+    "transcription regulation": "#66c2a5",
+    "ABC transporters": "#fc8d62",
+    "lipidA": "#8da0cb",
+    "quorum sensing": "#e78ac3",
+    "Known_DR_genes": "#a6a6a6",
+    "Characteristic_R_gene": "#808080",
+    "Characteristic_S_gene": "#696969",
+    "Outer_membrane": "#4d4d4d",
+    "Known_peptide_genes": "#333333",
+    "up_regulated_2nd": "#1a1a1a",
+    "down_regulated_2nd": "#b3b3b3",  # Renamed duplicate "down_regulated"
+}
+
+    for function in functions:
+        if function in function_colors:
+            return function_colors[function]
+    return "black"
+
+# Categorize interactions and collect data for CSV
+for gene in genes_of_interest:
+    if gene in resistant_matrix.index and gene in susceptible_matrix.index:
+        for partner in resistant_matrix.columns:
+            if gene != partner:
+                resistant_score = resistant_matrix.loc[gene, partner] if partner in resistant_matrix.columns else 0
+                susceptible_score = susceptible_matrix.loc[gene, partner] if partner in susceptible_matrix.columns else 0
+                
+                if resistant_score > threshold_resistant and susceptible_score == 0:
+                    category = "Resistant Only"
+                elif susceptible_score > threshold_resistant and resistant_score <= threshold_susceptible:
+                    category = "Susceptible Only"
+                elif resistant_score > threshold_resistant and susceptible_score > threshold_resistant:
+                    category = "Shared"
+                elif resistant_score > threshold_resistant and susceptible_score <= max_susceptible_isolates:
+                    category = "Special"
+                else:
+                    continue
+                
+                gene_functions = gene_to_functions.get(gene, ["Unknown"])
+                partner_functions = gene_to_functions.get(partner, ["Unknown"])
+                
+                # Collect data for CSV
+                csv_data.append({
+                    "Gene": gene,
+                    "Partner": partner,
+                    "Resistant Score": resistant_score,
+                    "Susceptible Score": susceptible_score,
+                    "Category": category,
+                    "Gene Functions (Gene)": ";".join(gene_functions),
+                    "Gene Functions (Partner)": ";".join(partner_functions)
+                })
+
+# Save data to CSV
+output_csv_file = "/home/tinas/new_colistin_analysis/transcriptome_anlaysis/final_matrix_2075/gene_network_data.csv"
+df = pd.DataFrame(csv_data)
+df.to_csv(output_csv_file, index=False)
+print(f"CSV file saved to {output_csv_file}")
